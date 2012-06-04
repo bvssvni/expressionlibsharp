@@ -73,10 +73,16 @@ namespace ExpressionLib
 		//Gets the functions.
 		public IFunction[] GetFunctions()
 		{
-			IFunction[] func = new IFunction[m_functions.Count];
+			int count = m_functions.Count + s_sharedFunctions.Count;
+			
+			IFunction[] func = new IFunction[count];
 			for (int i = 0; i <= m_functions.Count - 1; i++) 
 			{
 				func[i] = (IFunction)m_functions.GetByIndex(i);
+			}
+			for (int i = 0; i < s_sharedFunctions.Count; i++)
+			{
+				func[i+m_functions.Count] = (IFunction)s_sharedFunctions.GetByIndex(i);
 			}
 			return func;
 		}

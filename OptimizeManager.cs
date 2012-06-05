@@ -516,11 +516,10 @@ namespace ExpressionLib
 		private int DependicyType(string key)
 		{
 			if (m_calculator.GetExpression(key) != null)
-			{
 				//There is an expression for this.
 				return DependicyInfo.DEPENDICY_TYPE_EXPRESSION;
-			}
-			else if (key.IndexOf(Calculator.PROPERTY_CHAR) == -1) 
+			
+			if (key.IndexOf(Calculator.PROPERTY_CHAR) == -1) 
 			{
 				if (!ExpressionTreeNode.IsFunction(key) && !ExpressionTreeNode.IsText(key))
 				{
@@ -536,22 +535,21 @@ namespace ExpressionLib
 			{
 				//Don't allow more than sub-properties.
 				int count = 0;
-				for (int i = 0; i <= key.Length - 1; i++) 
+				int i;
+				int keyLength = key.Length;
+				char c;
+				for (i = 0; i <= keyLength - 1; i++) 
 				{
-					char c = key[i];
+					c = key[i];
 					if (c == Calculator.PROPERTY_CHAR)
 					{
 						count += 1;
 						if (count > 2)
-						{
 							return DependicyInfo.DEPENDICY_TYPE_NOT_LEGAL;
-						}
 					}
 				}
 				if (count == 1)
-				{
 					return DependicyInfo.DEPENDICY_TYPE_PROPERTY;
-				}
 			}
 			return DependicyInfo.DEPENDICY_TYPE_NOT_LEGAL;
 		}
@@ -561,9 +559,8 @@ namespace ExpressionLib
 		private bool FindDependices(string expKey, ExpressionTreeNode node, ArrayList coll, string relative, ExpressionTreeNode parent, bool slack)
 		{
 			if (node == null)
-			{
 				return true;
-			}
+			
 			switch (node.NodeType) 
 			{
 				case ExpressionTreeNode.NODE_TYPE.VARIABLE:
@@ -618,27 +615,23 @@ namespace ExpressionLib
 								{
 									IVariableReferencePropertyUsage propFunc = (IVariableReferencePropertyUsage)func;
 									string[] propertyDependices = propFunc.GetDependices(var.GetType());
-									if (propertyDependices == null)
-									{
-										return false;
-									}
+									if (propertyDependices == null) return false;
+									
 									foreach (string prop in propertyDependices) 
 									{
 										coll.Add(node.Value + "." + prop);
 
 										// (04.05.2007 10:43)
 										// Add child property dependices.
-										if (var is IOptimizable)
+										if (!(var is IOptimizable)) continue;
+										
+										PropertyDependicy[] deps = ((IOptimizable)var).PropertyDependices;
+										if (deps == null) continue;
+										
+										foreach (PropertyDependicy dep in deps)
 										{
-											PropertyDependicy[] deps = ((IOptimizable)var).PropertyDependices;
-											if (deps != null)
-											{
-												foreach (PropertyDependicy dep in deps)
-												{
-													if (dep.ParentProperty.Equals(prop))
-														coll.Add(node.Value + "." + dep.ChildProperty);
-												}
-											}
+											if (dep.ParentProperty.Equals(prop))
+												coll.Add(node.Value + "." + dep.ChildProperty);
 										}
 									}
 									return true;
@@ -656,10 +649,8 @@ namespace ExpressionLib
 					{
 						string variableName = key.Substring(0, propIndex);
 						IVariable var = m_calculator.Variable(variableName);
-						if (var == null)
-						{
-							return false;
-						}
+						if (var == null) return false;
+						
 						object obj = var;
 						if (obj is IOptimizable)
 						{
@@ -684,11 +675,9 @@ namespace ExpressionLib
 				case ExpressionTreeNode.NODE_TYPE.FUNCTION:
 				case ExpressionTreeNode.NODE_TYPE.OPERATOR:
 					IFunction nodeFunction = m_functions.Item((string)node.Value);
-					if (nodeFunction is IRandomFunction)
-					{
-						//Not optimizable.
-						return false;
-					}
+					
+					// Random functions are not optimizable.
+					if (nodeFunction is IRandomFunction) return false;
 
 					//Check if function is slack.
 					bool isSlack = false;
@@ -722,13 +711,10 @@ namespace ExpressionLib
 			Expression[] expressions = m_computeList.GetExpressions();
 			ArrayList coll = new ArrayList(expressions.Length + m_notOptimizables.Length);
 			if (m_notOptimizables.Length != 0)
-			{
 				coll.AddRange(this.m_notOptimizables);
-			}
+			
 			if (expressions.Length != 0)
-			{
 				coll.AddRange(expressions);
-			}
 			return coll;
 		}
 
@@ -766,12 +752,13 @@ namespace ExpressionLib
 				exp = m_calculator.GetExpressionObject(expressionName);
 				m_computeList.Add(expressionName, exp);
 			}
-			int n;
+			int n, i;
+			ArrayList expressionList;
 			foreach (DictionaryEntry entry in this.m_eventGraph) 
 			{
-				ArrayList expressionList = (ArrayList)m_eventGraph[entry.Key];
+				expressionList = (ArrayList)m_eventGraph[entry.Key];
 				n = expressionList.Count;
-				for (int i = 0; i < n; i++)
+				for (i = 0; i < n; i++)
 				{
 					exp = (Expression)expressionList[i];
 					m_computeList.Add(exp.Key, exp);
@@ -782,23 +769,18 @@ namespace ExpressionLib
 
 		public void PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs evt)
 		{
-			if (computing)
+			if (computing) return;
+			if (m_eventGraph == null) return;
+			
+			// Map to key, and call event graph.
+			string varName = ((IVariable)sender).Name;
+			string key = varName + Calculator.PROPERTY_CHAR + evt.PropertyName;
+			if (!m_eventGraph.Contains(key)) return;
+			
+			ArrayList expressionList = (ArrayList)m_eventGraph[key];
+			foreach (Expression exp in expressionList)
 			{
-				return;
-			}
-			if (m_eventGraph != null)
-			{
-				// Map to key, and call event graph.
-				string varName = ((IVariable)sender).Name;
-				string key = varName + Calculator.PROPERTY_CHAR + evt.PropertyName;
-				if (m_eventGraph.Contains(key))
-				{
-					ArrayList expressionList = (ArrayList)m_eventGraph[key];
-					foreach (Expression exp in expressionList)
-					{
-						m_computeList.Add(exp.Key, exp);
-					}
-				}
+				m_computeList.Add(exp.Key, exp);
 			}
 		}
 		//Copies the optimize info to another optimize manager so
@@ -815,10 +797,11 @@ namespace ExpressionLib
 			optimizeManager.m_notOptimizables = notOptimizables;
 			
 			optimizeManager.m_eventGraph = new Hashtable();
+			ArrayList events, newEvents;
 			foreach (DictionaryEntry entry in this.m_eventGraph)
 			{
-				ArrayList events = (ArrayList)entry.Value;
-				ArrayList newEvents = new ArrayList();
+				events = (ArrayList)entry.Value;
+				newEvents = new ArrayList();
 				foreach (Expression exp in events)
 					newEvents.Add(calc.GetExpressionObject(exp.Key));
 				optimizeManager.m_eventGraph[entry.Key] = newEvents;

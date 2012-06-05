@@ -42,13 +42,9 @@ namespace ExpressionLib
 		public Calculator Calculator 
 		{
 			get 
-			{
-				return m_calculator;
-			}
+			{return m_calculator;}
 			set 
-			{
-				m_calculator = value;
-			}
+			{m_calculator = value;}
 		}
 		public void Optimize()
 		{
@@ -189,9 +185,7 @@ namespace ExpressionLib
 			foreach (string key in notOptimizables.Values) 
 			{
 				if (optimizables.Contains(key))
-				{
 					optimizables.Remove(key);
-				}
 			}
 			//Remove all optimalizables that depends on not-optimalizables.
 			Hashtable lastNotOptimizables = notOptimizables;
@@ -203,37 +197,30 @@ namespace ExpressionLib
 				Hashtable tempNotOptimizables = new Hashtable();
 				foreach (DependicyInfo dep in optimizables.Values) 
 				{
-					if (dep.Type == DependicyInfo.DEPENDICY_TYPE_EXPRESSION)
+					if (dep.Type != DependicyInfo.DEPENDICY_TYPE_EXPRESSION) continue;
+					
+					foreach (string depName in dep.Deps) 
 					{
-						foreach (string depName in dep.Deps) 
+						if (lastNotOptimizables[depName] == null) continue;
+						
+						tempNotOptimizables.Add(dep.Key, dep.Key);
+						//Remove child property dependices of dependicy.
+						int propIndex = depName.IndexOf(Calculator.PROPERTY_CHAR);
+						string variableName = depName.Substring(0, propIndex);
+						object obj = m_calculator.Variable(variableName);
+						
+						if (!(obj is IOptimizable)) break;
+						
+						IOptimizable opt = (IOptimizable)obj;
+						if (opt.PropertyDependices == null) continue;
+						
+						foreach (PropertyDependicy propertyDep in opt.PropertyDependices) 
 						{
-							if (lastNotOptimizables[depName] != null)
-							{
-								tempNotOptimizables.Add(dep.Key, dep.Key);
-								//Remove child property dependices of dependicy.
-								int propIndex = depName.IndexOf(Calculator.PROPERTY_CHAR);
-								string variableName = depName.Substring(0, propIndex);
-								object obj = m_calculator.Variable(variableName);
-								if (obj is IOptimizable)
-								{
-									IOptimizable opt = (IOptimizable)obj;
-									if (opt.PropertyDependices != null)
-									{
-										foreach (PropertyDependicy propertyDep in opt.PropertyDependices) 
-										{
-											if (propertyDep.ParentProperty == depName.Substring(propIndex + 1))
-											{
-												string childKey = variableName + Calculator.PROPERTY_CHAR + propertyDep.ChildProperty;
-												if (!tempNotOptimizables.Contains(childKey))
-												{
-													tempNotOptimizables.Add(childKey, childKey);
-												}
-											}
-										}
-									}
-								}
-								break;
-							}
+							if (propertyDep.ParentProperty != depName.Substring(propIndex + 1)) continue;
+							
+							string childKey = variableName + Calculator.PROPERTY_CHAR + propertyDep.ChildProperty;
+							if (!tempNotOptimizables.Contains(childKey))
+								tempNotOptimizables.Add(childKey, childKey);
 						}
 					}
 				}
@@ -257,19 +244,16 @@ namespace ExpressionLib
 			foreach (string key in notOptimizables.Values) 
 			{
 				if (optimizables.Contains(key))
-				{
 					optimizables.Remove(key);
-				}
 			}
 
 			IVariable[] variables = m_calculator.GetVariables();
 			foreach (IVariable variable in variables)
 			{
-				if (variable is IOptimizable)
-				{
-					IOptimizable obj = (IOptimizable)variable;
-					obj.PropertyChanged -= new PropertyChangedEventHandler(PropertyChanged);
-				}
+				if (!(variable is IOptimizable)) continue;
+				
+				IOptimizable obj = (IOptimizable)variable;
+				obj.PropertyChanged -= new PropertyChangedEventHandler(PropertyChanged);
 			}
 
 			#region "Dependicy Reversing"
@@ -281,35 +265,30 @@ namespace ExpressionLib
 			Hashtable processedEvents = new Hashtable();
 			foreach (DependicyInfo opt in optimizables.Values) 
 			{
-				if (opt.Deps != null)
+				if (opt.Deps == null) continue;
+				
+				AddToEventList(opt, opt.Deps, optimizables, eventGraph, objectMap, processedEvents);
+				//An expression should update it self if it differ from it's previous value.
+				if (opt.Type != DependicyInfo.DEPENDICY_TYPE_EXPRESSION) continue;
+				
+				string varName = opt.Key.Substring(0, opt.Key.IndexOf(Calculator.PROPERTY_CHAR));
+				object obj = m_calculator.Variable(varName);
+				if (!(obj is IOptimizable)) continue;
+				
+				IOptimizable optObj = (IOptimizable)obj;
+				if (!eventGraph.Contains(opt.Key))
 				{
-					AddToEventList(opt, opt.Deps, optimizables, eventGraph, objectMap, processedEvents);
-					//An expression should update it self if it differ from it's previous value.
-					if (opt.Type == DependicyInfo.DEPENDICY_TYPE_EXPRESSION)
+					if (!objectMap.Contains(optObj))
 					{
-						string varName = opt.Key.Substring(0, opt.Key.IndexOf(Calculator.PROPERTY_CHAR));
-						object obj = m_calculator.Variable(varName);
-						if (obj is IOptimizable)
-						{
-							IOptimizable optObj = (IOptimizable)obj;
-							if (!eventGraph.Contains(opt.Key))
-							{
-								if (!objectMap.Contains(optObj))
-								{
-									optObj.PropertyChanged += new PropertyChangedEventHandler(PropertyChanged);
-									objectMap.Add(optObj, varName);
-								}
-								eventGraph.Add(opt.Key, new ArrayList());
-							}
-							//Add to event list.
-							ArrayList events = (ArrayList)eventGraph[opt.Key];
-							if (!events.Contains(opt.Key))
-							{
-								events.Add(m_calculator.GetExpressionObject(opt.Key));
-							}
-						}
+						optObj.PropertyChanged += new PropertyChangedEventHandler(PropertyChanged);
+						objectMap.Add(optObj, varName);
 					}
+					eventGraph.Add(opt.Key, new ArrayList());
 				}
+				//Add to event list.
+				ArrayList events = (ArrayList)eventGraph[opt.Key];
+				if (!events.Contains(opt.Key))
+					events.Add(m_calculator.GetExpressionObject(opt.Key));
 			}
 			#endregion
 
@@ -323,14 +302,10 @@ namespace ExpressionLib
 			{
 				string exp = m_calculator.GetExpression(key);
 				if (exp != null && System.Text.RegularExpressions.Regex.IsMatch(exp.Trim(), Calculator.NAME_REGEX))
-				{
 					objectReferences.Add(key);
-				}
 			}
-			foreach (string key in objectReferences) 
-			{
+			foreach (string key in objectReferences)
 				notOptimizables.Remove(key);
-			}
 			//Remember the object references for later use.
 			m_objectReferences = objectReferences;
 			//Create list of not optimizable expressions.
@@ -339,9 +314,7 @@ namespace ExpressionLib
 			{
 				Expression exp = m_calculator.GetExpressionObject(key);
 				if (exp != null)
-				{
 					expressionList.Add(exp);
-				}
 			}
 			#endregion
 		

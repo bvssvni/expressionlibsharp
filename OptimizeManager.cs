@@ -353,9 +353,7 @@ namespace ExpressionLib
 			public int Count 
 			{
 				get 
-				{
-					return m_direct.Count;
-				}
+				{return m_direct.Count;}
 			}
 			public Expression[] GetExpressions()
 			{
@@ -376,13 +374,12 @@ namespace ExpressionLib
 				//Make thread safe.
 				lock (this) 
 				{
-					if (!m_computing.Contains(key))
-					{
-						m_computing.Add(key, key);
-						m_direct.Enqueue(exp);
-						//Reset the buffer before computing.
-						exp.ResetBuffer();
-					}
+					if (m_computing.Contains(key)) return;
+					
+					m_computing.Add(key, key);
+					m_direct.Enqueue(exp);
+					//Reset the buffer before computing.
+					exp.ResetBuffer();
 				}
 			}
 		}
@@ -437,89 +434,84 @@ namespace ExpressionLib
 		{
 			//(29.11.2006 12:15)
 			if (processed.Contains(opt))
-			{
 				return (bool)processed[opt];
-			}
-			if (notOptimized[opt.Key] == null)
+			
+			if (notOptimized[opt.Key] != null)
 			{
-				if (opt.Deps == null)
+				processed[opt] = true;
+				return true;
+			}
+			
+			if (opt.Deps == null)
+			{
+				processed[opt] = false;
+				return false;
+			}
+			
+			bool recursive = false;
+			string historyKey, variableName, parentKey;
+			int propIndex;
+			object depObj;
+			
+			//Check each dependicy if it is recursive.
+			foreach (string depName in opt.Deps) 
+			{
+				historyKey = opt.Key + " " + depName;
+				if (history[historyKey] != null)
 				{
-					processed[opt] = false;
-					return false;
+					//Recursive.
+					//(B001)
+					notOptimized[depName] = depName;
+					recursive = true;
+					continue;
 				}
-				bool recursive = false;
-				//Check each dependicy if it is recursive.
-				foreach (string depName in opt.Deps) 
+				
+				//Check with property dependicy.
+				propIndex = depName.IndexOf(Calculator.PROPERTY_CHAR);
+				variableName = depName.Substring(0, propIndex);
+				depObj = m_calculator.Variable(variableName);
+				if (!(depObj is IOptimizable)) continue;
+				
+				IOptimizable depOpt = (IOptimizable)depObj;
+				if (depOpt.PropertyDependices == null) continue;
+				
+				foreach (PropertyDependicy propertyDep in depOpt.PropertyDependices) 
 				{
-					string historyKey = opt.Key + " " + depName;
-					if (history[historyKey] != null)
+					if (propertyDep.ChildProperty != depName.Substring(propIndex + 1)) continue;
+					
+					parentKey = variableName + Calculator.PROPERTY_CHAR + propertyDep.ParentProperty;
+					if (history[opt.Key + " " + parentKey] != null)
 					{
 						//Recursive.
 						//(B001)
 						notOptimized[depName] = depName;
 						recursive = true;
 					}
-					else
-					{
-						//Check with property dependicy.
-						int propIndex = depName.IndexOf(Calculator.PROPERTY_CHAR);
-						string variableName = depName.Substring(0, propIndex);
-						object depObj = m_calculator.Variable(variableName);
-						if (depObj is IOptimizable)
-						{
-							IOptimizable depOpt = (IOptimizable)depObj;
-							if (depOpt.PropertyDependices != null)
-							{
-								foreach (PropertyDependicy propertyDep in depOpt.PropertyDependices) 
-								{
-									if (propertyDep.ChildProperty == depName.Substring(propIndex + 1))
-									{
-										string parentKey = variableName + Calculator.PROPERTY_CHAR + propertyDep.ParentProperty;
-										if (history[opt.Key + " " + parentKey] != null)
-										{
-											//Recursive.
-											//(B001)
-											notOptimized[depName] = depName;
-											recursive = true;
-										}
-									}
-								}
-							}
-						}
-					}
 				}
-				//Search in each not-recursive dependicy.
-				foreach (string depName in opt.Deps) 
-				{
-					string historyKey = opt.Key + " " + depName;
-					if (notOptimized[depName] == null)
-					{
-						history.Add(historyKey, true);
-						if (this.RemoveRecursive((DependicyInfo)optimized[depName], optimized, notOptimized, history, processed))
-						{
-							recursive = true;
-						}
-						else
-						{
-							history.Remove(historyKey);
-						}
-					}
-				}
-				if (recursive)
-				{
-					if (notOptimized[opt.Key] == null)
-					{
-						notOptimized.Add(opt.Key, opt.Key);
-					}
-				}
-				processed[opt] = recursive;
-				return recursive;
 			}
-			else
+			//Search in each not-recursive dependicy.
+			foreach (string depName in opt.Deps) 
 			{
-				processed[opt] = true;
-				return true;
+				if (notOptimized[depName] != null) continue;
+				
+				historyKey = opt.Key + " " + depName;
+				history.Add(historyKey, true);
+				if (this.RemoveRecursive((DependicyInfo)optimized[depName], optimized, notOptimized, history, processed))
+				{
+					recursive = true;
+				}
+				else
+				{
+					history.Remove(historyKey);
+				}
 			}
+			if (recursive)
+			{
+				if (notOptimized[opt.Key] == null)
+					notOptimized.Add(opt.Key, opt.Key);
+			}
+			processed[opt] = recursive;
+			return recursive;
 		}
 		private int DependicyType(string key)
 		{
